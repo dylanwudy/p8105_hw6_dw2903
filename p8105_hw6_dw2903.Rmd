@@ -8,6 +8,11 @@ output: github_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(modelr)
+library(mgcv)
+```
+
+```{r}
 birthweight = read.csv("./birthweight.csv")
 weather_df = 
   rnoaa::meteo_pull_monitors(
@@ -21,88 +26,83 @@ weather_df =
     tmax = tmax / 10) %>%
   select(name, id, everything())
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+## Problem 1 
+clean data
+```{r}
+birthweight = 
+  birthweight %>%
+  janitor::clean_names() %>%
+  mutate(
+    babysex = as.factor(babysex),
+    frace = as.factor(frace),
+    malform = as.factor(malform),
+    mrace = as.factor(mrace),
+  )
+```
+creat regression 1 that hypothesis the birthweight is related baby's condition as well as family income and mother's weight 
+```{r}
+fit_1 = lm(bwt~babysex+bhead+blength+delwt+fincome+gaweeks,data = birthweight)
+fit_1 %>%
+  broom::tidy() %>%
+  knitr::kable(digits = 3)
+```
+in this model the bwt is strongly related to all the factors in the model including baby sex, baby's head circumference at birth, baby's length at birth, mother's weight, family monthly income, gestational age, showing a very small p value for the coeficient of all the factors
+
+```{r}
+modelr::add_predictions(birthweight,fit_1) %>%
+  ggplot(aes(x=bwt,y=pred))+geom_point()
+modelr::add_residuals(birthweight,fit_1) %>%
+  ggplot(aes(x=bwt,y=resid))+geom_violin()
+```
+the prediction value and the observed value mostly have very little residules with several outliers and most of outliers have positive residuals.  
+
+creat linear models to compare
+```{r}
+fit_2= lm(bwt~blength+gaweeks, data=birthweight)
+fit_3= lm(bwt~bhead*blength*babysex,data = birthweight)
+
+```
+
+### cross validation
+
+```{r}
+cv_bw=
+  crossv_mc(birthweight,100) %>%
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test,as_tibble)
+  ) 
+
+```
+
+```{r}
+cv_bw_map=
+  cv_bw %>%
+  mutate(
+    lm_1 = map(train,~lm(bwt~babysex+bhead+blength+delwt+fincome+gaweeks,data = birthweight)),
+    lm_2 = map(train,~lm(bwt~blength+gaweeks, data=birthweight)),
+    lm_3 = map(train,~lm(bwt~bhead*blength*babysex,data = birthweight))
+  ) %>%
+  mutate(
+    rmse_1 = map2_dbl(lm_1,test,~rmse(model= .x, data=.y)),
+    rmse_2 = map2_dbl(lm_2,test,~rmse(model=.x, data=.y)),
+    rmse_3 = map2_dbl(lm_3,test,~rmse(model=.x, data=.y)),
+  )
+```
+
+```{r}
+cv_bw_map%>%
+  select(starts_with("rmse")) %>%
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>%
+  mutate(model=fct_inorder(model)) %>%
+  ggplot(aes(x=model, y=rmse)) +geom_violin()
+```
+base on the rmse model comparison, the hypothesis model including baby sex, baby's head circumference at birth, baby's length at birth, mother's weight, family monthly income, gestational age are better representative than the models for reference. 
 
 
 
