@@ -46,6 +46,10 @@ fit_1 %>%
   broom::tidy() %>%
   knitr::kable(digits = 3)
 ```
+
+
+
+
 in this model the bwt is strongly related to all the factors in the model including baby sex, baby's head circumference at birth, baby's length at birth, mother's weight, family monthly income, gestational age, showing a very small p value for the coeficient of all the factors
 
 ```{r}
@@ -105,13 +109,61 @@ cv_bw_map%>%
 base on the rmse model comparison, the hypothesis model including baby sex, baby's head circumference at birth, baby's length at birth, mother's weight, family monthly income, gestational age are better representative than the models for reference. 
 
 
+## Problem 2
+bootstrap dataframe
+```{r}
+boot_sample = function(df) {
+  sample_frac(df, replace = TRUE)
+}
+
+boot_weather = 
+  data_frame(
+    strap_number = 1:5000,
+    strap_sample = rerun(5000,boot_sample(weather_df))
+  ) %>%
+  mutate( 
+    models= map(strap_sample,~lm(tmax~tmin,data=.x)),
+    results= map(models, broom::glance),
+    results_2= map(models,broom::tidy)
+    ) %>%
+  select(-strap_sample,-models) %>%
+  unnest()%>%
+  select(
+    term, strap_number, r.squared, estimate
+  )  
+```
+```{r}
+boot_weather %>%
+  ggplot(aes(y=estimate,color=term))+geom_boxplot()
+boot_weather %>%
+  group_by(term)%>%
+  summarize(
+    estimate = mean(estimate)
+  )
+```
+
+as showing in plot, the estimator coefficient are generally normally distributed with average value of 7.208 in intercept while 1.040 for coefficient of tmin
+```{r}
+boot_weather%>%
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  ) %>%
+  janitor::clean_names()%>%
+  summarize(
+    r_squared_left = mean(r_squared)-sd(r_squared)*qt(0.975,df=4999)/sqrt(5000),
+    r_squared_right = mean(r_squared)+sd(r_squared)*qt(0.975,df=4999)/sqrt(5000),
+    coef_left = mean(log(intercept*tmin))-sd(log(intercept*tmin))*qt(0.975,df=4999)/sqrt(5000),
+    coeft_right = mean(log(intercept*tmin))+sd(log(intercept*tmin))*qt(0.975,df=4999)/sqrt(5000),
+    
+  )
 
 
+  
 
+```
 
-
-
-
+The R^2 is in (0.9112487,0.9117194) and log(β0*β1) is in (2.012493,2.01381)
 
 
 
